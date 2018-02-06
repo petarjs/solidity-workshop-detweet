@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <title>Page Title</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+      body {
+        font-size: 16px;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif
+      }
+
+      #loader {
+          width: 100px;
+          display:none;
+          position: absolute;
+          top: 10px;
+          right: 10px;
+      }
+
+      button {
+        padding: 10px 20px;
+        font-size: 20px;
+        background: darkorchid;
+        color: white;
+        border-radius: 6px;
+        cursor: pointer;
+        vertical-align: middle;
+      }
+
+      textarea {
+        vertical-align: middle;
+        width: 300px;
+        height: 40px;
+      }
+
+      small {
+        font-size: 12px;
+        color: #999;
+      }
+
+      .tweet {
+        margin-bottom: 40px;
+      }
+
+    </style>
+</head>
+<body>
+    <img id="loader" src="https://loading.io/spinners/double-ring/lg.double-ring-spinner.gif">
+
+    <h1>Detweet</h1>
+
+    <textarea class="js-tweetInput" name="tweet"></textarea>
+    <button class="js-tweetBtn">Tweet</button>
+
+    <div>
+      <h3>Tweets:</h3>
+      <div class="js-tweets"></div>
+    </div>
+
+
+    <script>
+      const getBlockNumber = () =>
+        new Promise((resolve, reject) => {
+          web3.eth.getBlockNumber((error, latestBlock) => {
+            if (error) {
+              return reject(error);
+            }
+
+            return resolve(latestBlock);
+          });
+        });
+
+      window.addEventListener('load', function () {
+
+          // Checking if Web3 has been injected by the browser (Mist/MetaMask)
+          if (typeof web3 !== 'undefined') {
+            // Use Mist/MetaMask's provider
+            web3js = new Web3(web3.currentProvider);
+          } else {
+            console.log('No web3? You should consider trying MetaMask!')
+            // fallback - use your fallback strategy (local node / hosted node + in-dapp id mgmt / fail)
+            web3js = new Web3(new Web3.providers.HttpProvider("http://localhost:7545"));
+          }
+
+          // Now you can start your app & access web3 freely:
+          startApp()
+
+        })
+
+        function startApp() {
+          web3.version.getNetwork((err, netId) => {
+            switch (netId) {
+              case "1":
+                console.log('This is mainnet')
+                break
+              case "2":
+                console.log('This is the deprecated Morden test network.')
+                break
+              case "3":
+                console.log('This is the ropsten test network.')
+                break
+              case "4":
+                console.log('This is the Rinkeby test network.')
+                break
+              case "42":
+                console.log('This is the Kovan test network.')
+                break
+              default:
+                console.log('This is an unknown network.')
+            }
+          })
+          
+          let abi = [ { "constant": false, "inputs": [ { "name": "text", "type": "string" } ], "name": "addTweet", "outputs": [], "payable": false, "stateMutability": "nonpayable", "type": "function" }, { "constant": true, "inputs": [ { "name": "text", "type": "string" } ], "name": "getLikes", "outputs": [ { "name": "", "type": "uint256" } ], "payable": false, "stateMutability": "view", "type": "function" }, { "constant": false, "inputs": [ { "name": "text", "type": "string" } ], "name": "likeTweet", "outputs": [], "payable": false, "stateMutability": "nonpayable", "type": "function" }, { "inputs": [], "payable": false, "stateMutability": "nonpayable", "type": "constructor" }, { "anonymous": false, "inputs": [ { "indexed": false, "name": "from", "type": "address" }, { "indexed": false, "name": "text", "type": "string" } ], "name": "TweetAdded", "type": "event" }, { "anonymous": false, "inputs": [ { "indexed": false, "name": "text", "type": "string" }, { "indexed": false, "name": "likes", "type": "uint256" } ], "name": "TweetLiked", "type": "event" } ]
+
+          let address = '0x2c2b9c9a4a25e24b174f26114e8926a9f2128fe4'
+          let tweetContract = web3.eth.contract(abi).at(address)
+
+          let UI = {
+            tweetButton: document.querySelector('.js-tweetBtn'),
+            tweetInput: document.querySelector('.js-tweetInput'),
+            tweets: document.querySelector('.js-tweets'),
+            likeButtons: document.querySelectorAll('.js-like'),
+            loader: document.querySelector('#loader')
+          }
+
+          UI.loader.style.display = 'block'
+
+          tweetContract.TweetAdded({}, { fromBlock: 0, toBlock: 'latest' })
+            .watch((error, event) => {
+              if (error) {
+                console.log(error)
+                return
+              }
+
+              console.log(event)
+
+              tweetContract.getLikes(event.args.text, (err, res) => {
+                UI.loader.style.display = 'none'
+
+                if (err) {
+                  console.log(err)
+                  return
+                }
+
+                appendTweet({ ...event.args, likes: res })
+              })
+
+            });
+
+          getBlockNumber()
+            .then(blockNumber => {
+              tweetContract.TweetLiked({}, { fromBlock: blockNumber, toBlock: 'latest' })
+                .watch((error, event) => {
+                  if (error) {
+                    console.log(error)
+                    return
+                  }
+
+                  increaseTweetLikes(event.args.text)
+
+                });
+            })
+
+
+          UI.tweetButton.addEventListener('click', function () {
+            let tweet = UI.tweetInput.value
+
+            UI.loader.style.display = 'block'
+            tweetContract.addTweet(tweet, (err, res) => {
+              UI.loader.style.display = 'none'
+              UI.tweetInput.value = ''
+            })
+          })
+
+          function appendTweet ({ text, from, likes }) {
+            let tweetDiv = document.createElement('div')
+            tweetDiv.classList.add('tweet')
+
+            let textDiv = document.createElement('span')
+            textDiv.classList.add('js-text')
+            textDiv.innerHTML = text
+
+            let addressDiv = document.createElement('small')
+            addressDiv.innerHTML = from
+
+            let likesDiv = document.createElement('div')
+            likesDiv.classList.add('js-likes')
+            likesDiv.innerHTML = likes
+
+            let likeButton = document.createElement('button')
+            likeButton.innerHTML = 'Like'
+            likeButton.dataset.text = text
+            likeButton.classList.add('js-like')
+            likeButton.addEventListener('click', function(ev) {
+              let text = ev.target.dataset.text
+              console.log(text)
+
+              tweetContract.likeTweet(text, (err, res) => {})
+            })
+
+            tweetDiv.appendChild(textDiv)
+            tweetDiv.appendChild(document.createElement('br'))
+            tweetDiv.appendChild(addressDiv)
+            tweetDiv.appendChild(document.createElement('br'))
+            tweetDiv.appendChild(likesDiv)
+            tweetDiv.appendChild(document.createElement('br'))
+            tweetDiv.appendChild(likeButton)
+
+            UI.tweets.appendChild(tweetDiv)
+          }
+
+          function increaseTweetLikes (text) {
+            [...UI.tweets.querySelectorAll('.tweet')].forEach(tweetEl => {
+              if (tweetEl.querySelector('.js-text').innerHTML === text) {
+                let likesEl = tweetEl.querySelector('.js-likes')
+                likesEl.innerHTML = parseInt(likesEl.innerHTML, 10) + 1
+              }
+            })
+          }
+        }
+    </script>
+</body>
+</html>
