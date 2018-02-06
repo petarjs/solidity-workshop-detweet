@@ -34,7 +34,7 @@
 Congratulations!
 
 
-###Deploy with geth - requires node sync on localhost (too much time/space)
+### Deploy with geth - requires node sync on localhost (too much time/space)
 
 1. Install geth
    - https://github.com/ethereum/go-ethereum  
